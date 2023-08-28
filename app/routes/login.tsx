@@ -1,5 +1,12 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
-import { type ActionArgs, type V2_MetaFunction, json } from "@remix-run/node";
+import {
+  type ActionArgs,
+  type V2_MetaFunction,
+  json,
+  redirect,
+} from "@remix-run/node";
+import { commitSession, getSession } from "~/db.server";
+import { supabaseClient } from "~/supabase.server";
 
 export const meta: V2_MetaFunction = () => {
   return [
@@ -14,9 +21,23 @@ export let action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
   const { email, password } = Object.fromEntries(formData);
 
-  console.log(email, password);
+  const { data: user, error } = await supabaseClient.auth.signInWithPassword({
+    email: email.toString(),
+    password: password.toString(),
+  });
 
-  return json({});
+  if (user) {
+    const session = await getSession(request.headers.get("Cookie"));
+    session.set("access_token", user.session?.access_token);
+
+    return redirect("/", {
+      headers: {
+        "Set-Cookie": await commitSession(session),
+      },
+    });
+  }
+
+  return json({ user, error });
 };
 
 export default function Login() {
